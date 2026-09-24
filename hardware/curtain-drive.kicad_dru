@@ -1,0 +1,9 @@
+(version 1)
+
+# J1 (horizontal barrel jack) deliberately overhangs the left board edge so the
+# plug enters through the enclosure wall; its body outline on silk crosses the edge.
+(rule "J1 overhang silk"
+    (layer "F.Silkscreen")
+    (condition "A.memberOfFootprint('J1')")
+    (constraint silk_clearance (min -10mm))
+    (constraint edge_clearance (min -10mm)))

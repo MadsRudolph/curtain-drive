@@ -1,0 +1,19 @@
+# KiCad
+*.kicad_prl
+*-backups/
+_autosave-*
+fp-info-cache
+*.lck
+hardware/docs/*.dsn
+hardware/docs/*.ses
+hardware/docs/*.net
+hardware/docs/*.erc
+hardware/docs/*.drc
+# ESPHome
+firmware/secrets.yaml
+firmware/.esphome/
+# OpenSCAD / python
+__pycache__/
+*.pyc
+# Session notes
+HANDOFF.md
