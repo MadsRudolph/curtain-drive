@@ -54,6 +54,7 @@ FP_SW = "CurtainDrive:SW_PUSH_6mm_Jumpers"            # paired legs bridged insi
 FP_ESP = "CurtainDrive:ESP32-WROOM-32_NoVias"         # stock footprint minus the EP thermal vias
 FP_L298 = "Package_TO_SOT_THT:TO-220-15_P2.54x5.08mm_StaggerOdd_Lead4.58mm_Vertical"   # Multiwatt15 V
 FP_TO220_3 = "Package_TO_SOT_THT:TO-220-3_Vertical"
+FP_TO220_HS = "CurtainDrive:TO-220-3_Vertical_Heatsink16x16"   # + the pin-mount heatsink's two pin holes
 FP_TERM = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal"
 FP_KK2 = "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical"
 FP_KK4 = "Connector_Molex:Molex_KK-254_AE-6410-04A_1x04_P2.54mm_Vertical"
@@ -143,7 +144,7 @@ sh.rail((X5, u4.pin("OUT").y), net="+5V", rise=5.08)
 sh.note((G(122), G(16)), "3. 3.3 V  (LM317T;  Vout = 1.25 V x (1 + 392/243) = 3.27 V;  TO-220 heatsink)", size=2)
 YR = YB + G(2)
 XC = G(126)
-u3 = sh.place("Regulator_Linear:LM317_TO-220", "U3", at=(G(156), YR), value="LM317T", footprint=FP_TO220_3)
+u3 = sh.place("Regulator_Linear:LM317_TO-220", "U3", at=(G(156), YR), value="LM317T", footprint=FP_TO220_HS)
 sh.seg((XC, YP), (XC, YR))
 d2 = sh.place("Device:D_Schottky", "D2", at=(G(132), YR), rot=180, value="1N5817", footprint=DO41)
 sh.seg((XC, YR), d2.pin("A"))

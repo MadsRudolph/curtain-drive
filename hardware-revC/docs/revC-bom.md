@@ -68,8 +68,9 @@ through the laser-cut holes and soldered on the copper. Holes are not plated.
 kicad-laser-pcb skill's `references/esp32.md`): an LM317T with 243R/392R, a big bulk
 cap at the module and the firmware's Wi-Fi TX power capped at 8.5 dBm. From 12 V the
 LM317 dissipates about 1 W on average and up to 2 W while transmitting, so **fit the
-shop's TO-220 heatsink to U3**. Its tab faces the bottom edge, and the space behind it
-is kept clear for the heatsink. C7 sits where the module's 3V3 line leaves the
+shop's TO-220 heatsink to U3** (16 × 16 × 25.4 mm, two 2.3 mm pins). The board has
+the heatsink's two pin holes (2.6 mm, 10.2 mm apart, 5.65 mm behind U3's leg row) and
+keeps its 16 × 16 mm footprint behind U3's tab clear of other parts. C7 sits where the module's 3V3 line leaves the
 antenna keep-out, about 16 mm from pin 2, on a 0.8 mm track.
 
 ## Making the board on the F1 Ultra
@@ -109,7 +110,10 @@ and fills the board. Re-run them rather than editing the files by hand.
    - the diodes;
    - the disc capacitors (C14's legs bent out to 7.62 mm);
    - the switches and headers;
-   - U4, U3 (with its heatsink) and U2;
+   - U4, U3 and U2. For U3, screw the LM317's tab to the heatsink first (into its
+     tapped hole), then push the heatsink's pins and the three legs through together.
+     The legs stay straight and the regulator body sits about 6 mm above the board.
+     The pin holes carry no copper, so the pins just locate the heatsink;
    - the electrolytics last.
 3. Polarity:
    - Electrolytics: `+` on the square pad.
