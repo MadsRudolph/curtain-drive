@@ -66,6 +66,28 @@ copper. Holes are not plated, so each lead is soldered on the copper side only.
 - **D1 is a 1.5KE15A**, a unidirectional TVS, with its cathode on +12 V. (Rev A's SMAJ15A was drawn backwards, and is fixed there too.)
 - **The 0 Ω jumpers R14 and R16 are wire links**: a bent offcut of a resistor lead, 2.54 mm long.
 
+## Making the board on the F1 Ultra
+
+The layout uses 0.2 mm clearance and 0.3 mm tracks (0.2 mm minimum). That is inside the
+0.15 mm gaps and 0.15 mm traces the esp32-node test coupon cut cleanly on 2026-09-26.
+The laser files come from the board:
+
+    python3 tools/laser_export.py hardware-revB/curtain-drive-revB.kicad_pcb
+
+They land in `production/laser/`. The positive `production/*.dxf` files are for reference;
+don't feed them to XCS.
+
+1. Sand the copper lightly with 400 grit.
+2. **Copper:** import `curtain-drive-revB-ablate.dxf` and Make compound. Check that the
+   removed copper is black and the copper you keep is white, as in
+   `curtain-drive-revB-preview.png`. Run the `Traces` preset (Framing, Auto height,
+   Process). It is etched copper side up, as drawn: do **not** mirror it. Copper is on
+   F.Cu seen from above.
+3. **Holes and outline:** `curtain-drive-revB-cut.dxf` with the `Cut/Drill` preset.
+   It shares the ablate file's frame.
+4. Solder mask, only if the board has one: `curtain-drive-revB-mask.dxf` with
+   `RemoveSolderMask`. Delete its REFERENCE layer (the board outline) after aligning.
+
 ## Assembly
 
 1. Solder the SMD parts first, on the copper side: U1, U2, U3, U4, J1 and J2.
