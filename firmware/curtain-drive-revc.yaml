@@ -53,6 +53,9 @@ ota:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  # Caps the TX current peaks the LM317 rail has to ride through; this alone stopped
+  # the Wi-Fi boot loop on the esp32-solder-test board. Raise it only if range is short.
+  output_power: 8.5dB
   ap:
     ssid: "Curtain Drive"
 captive_portal:

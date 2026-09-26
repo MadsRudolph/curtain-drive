@@ -350,16 +350,16 @@
         "pattern": "Net-(U2-SENSE_A)"
       },
       {
-        "netclass": "Power",
-        "pattern": "Net-(D2-K)"
-      },
-      {
         "netclass": "Supply",
         "pattern": "+3V3"
       },
       {
         "netclass": "Supply",
         "pattern": "+5V"
+      },
+      {
+        "netclass": "Supply",
+        "pattern": "Net-(D10-K)"
       }
     ]
   },

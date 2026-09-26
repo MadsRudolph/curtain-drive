@@ -13,7 +13,7 @@ receptacle, its ESD array and the SMD barrel jack:
 
   1. 12 V in on a screw terminal -> TVS -> bulk caps -> VM, VM sense divider -> ADC1
   2. LM7805: 5 V logic supply for the L298
-  3. LM2575-ADJ buck: 12 V -> 3.3 V for the module (1.00k / 1.69k -> 3.31 V)
+  3. LM317T: 12 V -> 3.27 V for the module (243R / 392R), the proven ESP32 supply
   4. ESP32-WROOM-32 with reset/boot/user buttons, status LED, UART flashing header
      (the WROOM-32 has no native USB) and the I2C encoder header
   5. L298 bridge A drives the motor, with four Schottky flyback diodes; a 1 ohm sense
@@ -50,11 +50,9 @@ CP10 = "Capacitor_THT:CP_Radial_D10.0mm_P5.00mm"
 DO41 = "Diode_THT:D_DO-41_SOD81_P10.16mm_Horizontal"
 FP_TVS = "Diode_THT:D_DO-201AE_P15.24mm_Horizontal"
 FP_LED = "LED_THT:LED_D3.0mm"
-FP_L = "Inductor_THT:L_Radial_D10.0mm_P5.00mm_Fastron_07M"
 FP_SW = "CurtainDrive:SW_PUSH_6mm_Jumpers"            # paired legs bridged inside the switch
 FP_ESP = "CurtainDrive:ESP32-WROOM-32_NoVias"         # stock footprint minus the EP thermal vias
 FP_L298 = "Package_TO_SOT_THT:TO-220-15_P2.54x5.08mm_StaggerOdd_Lead4.58mm_Vertical"   # Multiwatt15 V
-FP_TO220_5 = "CurtainDrive:TO-220-5_Vertical_LongPads"   # stock pads leave a 0.09 mm ring
 FP_TO220_3 = "Package_TO_SOT_THT:TO-220-3_Vertical"
 FP_TERM = "TerminalBlock_Phoenix:TerminalBlock_Phoenix_MKDS-1,5-2-5.08_1x02_P5.08mm_Horizontal"
 FP_KK2 = "Connector_Molex:Molex_KK-254_AE-6410-02A_1x02_P2.54mm_Vertical"
@@ -138,49 +136,44 @@ X5 = G(106)
 sh.seg(u4.pin("OUT"), (X5, u4.pin("OUT").y))
 sh.rail((X5, u4.pin("OUT").y), net="+5V", rise=5.08)
 
-# --- Block C: 3.3 V buck -------------------------------------------------------
-sh.note((G(122), G(16)), "3. 3.3 V buck  (LM2575-ADJ, 52 kHz;  Vout = 1.23 V x (1 + 1.69k/1.00k) = 3.31 V)", size=2)
-u3 = sh.place("Regulator_Switching:LM2575BT-ADJ", "U3", at=(G(142), YB + 2.54),
-              value="LM2575T-ADJ", footprint=FP_TO220_5)
+# --- Block C: 3.3 V -----------------------------------------------------------
+# The proven ESP32 supply (kicad-laser-pcb references/esp32.md): an LM317T fed from
+# 12 V through a Schottky, 243R/392R for 3.27 V, 1N4003 reverse protection, and the
+# 470 uF bulk cap at the module (block 4) that rides through the Wi-Fi TX peaks.
+sh.note((G(122), G(16)), "3. 3.3 V  (LM317T;  Vout = 1.25 V x (1 + 392/243) = 3.27 V;  TO-220 heatsink)", size=2)
+YR = YB + G(2)
 XC = G(126)
-sh.seg((XC, YP), (XC, u3.pin("VIN").y))
-c4 = hang("Device:C_Polarized", "C4", XC, u3.pin("VIN").y, "47uF 50V", CP63)
-sh.seg((XC, u3.pin("VIN").y), u3.pin("VIN"))
+u3 = sh.place("Regulator_Linear:LM317_TO-220", "U3", at=(G(156), YR), value="LM317T", footprint=FP_TO220_3)
+sh.seg((XC, YP), (XC, YR))
+d2 = sh.place("Device:D_Schottky", "D2", at=(G(132), YR), rot=180, value="1N5817", footprint=DO41)
+sh.seg((XC, YR), d2.pin("A"))
+sh.seg(d2.pin("K"), u3.pin("VI"))
+c4 = hang("Device:C_Polarized", "C4", G(138), YR, "10uF 50V", CP5)
+c8 = hang("Device:C", "C8", G(144), YR, "100nF", CDISC)
 sh.gnd(c4.pin(2))
-pon = u3.pin(5)                                       # ON/OFF low = on
-sh.gnd(pon, drop=G(2))
-sh.gnd(u3.pin("GND"))
-pout = u3.pin("OUT")
-XD = G(156)
-sh.seg(pout, (XD, pout.y))
-d2 = diode_up("D2", XD, pout.y + 7.62, "1N5817", DO41)          # catch diode, anode to GND
-sh.gnd(d2.pin("A"))
-l1 = horiz("Device:L", "L1", G(158), pout.y, "120uH 1A", FP_L)
-sh.seg((XD, pout.y), l1.pin(1))
-X33 = G(182)
-sh.seg(l1.pin(2), (X33, pout.y))
-c7 = hang("Device:C_Polarized", "C7", G(168), pout.y, "470uF 10V", CP8)
-c8 = hang("Device:C", "C8", G(174), pout.y, "100nF", CDISC)
-sh.gnd(c7.pin(2))
 sh.gnd(c8.pin(2))
-r17 = hang("Device:R", "R17", X33, pout.y, "1.69k", RAX)          # Vout -> FB
-r18 = hang("Device:R", "R18", X33, pout.y + 7.62, "1.00k", RAX)   # FB -> GND
+sh.power("power:PWR_FLAG", (G(141), YR))              # diode-fed regulator input
+YD = YR - G(6)                                        # 1N4003: 3V3 -> VI if the input is shorted
+sh.seg((G(147), YR), (G(147), YD))
+d10 = sh.place("Device:D", "D10", at=(G(156), YD), rot=0, value="1N4003", footprint=DO41)
+sh.seg((G(147), YD), d10.pin("K"))
+X33 = G(182)
+sh.seg(u3.pin("VO"), (X33, YR))
+sh.seg(d10.pin("A"), (G(165), YD))
+sh.seg((G(165), YD), (G(165), YR))
+r17 = hang("Device:R", "R17", G(170), YR, "243", RAX)            # VO -> ADJ, right at the regulator
+r18 = hang("Device:R", "R18", G(170), YR + 7.62, "392", RAX)     # ADJ -> GND
+sh.seg(u3.pin("ADJ"), r17.pin(2))
 sh.gnd(r18.pin(2))
-pfb = u3.pin("FB")
-XFB = G(186)
-YFB = pfb.y - G(6)                                    # over the +3V3 rail symbol
-sh.seg(pfb, (pfb.x + G(2), pfb.y))
-sh.seg((pfb.x + G(2), pfb.y), (pfb.x + G(2), YFB))
-sh.seg((pfb.x + G(2), YFB), (XFB, YFB))
-sh.seg((XFB, YFB), (XFB, r17.pin(2).y))
-sh.seg((XFB, r17.pin(2).y), r17.pin(2))
-sh.rail((G(174), pout.y), net="+3V3", rise=5.08)
-sh.note((G(122), YB + G(22)), "Fixed LM2575T-3.3 instead: fit R17 as a wire link, leave R18 out.")
+c10 = hang("Device:C_Polarized", "C10", G(176), YR, "10uF 50V", CP5)
+sh.gnd(c10.pin(2))
+sh.rail((X33, YR), net="+3V3", rise=5.08)
+sh.note((G(122), YR + G(20)), "About 1 W at 12 V in, 2 W during Wi-Fi TX: fit the shop's TO-220 heatsink on U3.")
 
 # --- Power flags (corner row) -------------------------------------------------
 XF, YF = G(256), G(18)
 sh.note((XF - G(6), YF - G(7)), "Power flags", size=1.27)
-for i, net in enumerate(("+12V", "+3V3")):   # +5V is driven by the LM7805
+for i, net in enumerate(("+12V",)):   # +5V and +3V3 are driven by the regulators
     x = XF + i * G(14)
     sh.power(f"power:{net}", (x, YF)); sh.power("power:PWR_FLAG", (x - 7.62, YF)); sh.seg((x - 7.62, YF), (x, YF))
 x = XF + 3 * G(14)
@@ -227,11 +220,11 @@ p33 = u1.pin("VDD")
 Y33 = p33.y - G(10)
 sh.seg(p33, (p33.x, Y33))
 sh.seg((p33.x, Y33), (G(146), Y33))
-c10 = hang("Device:C_Polarized", "C10", G(138), Y33, "10uF 50V", CP5)
+c7 = hang("Device:C_Polarized", "C7", G(138), Y33, "470uF 10V", CP8)   # Wi-Fi TX peaks
 c11 = hang("Device:C", "C11", G(146), Y33, "100nF", CDISC)
-sh.seg(c10.pin(2), (c10.x, Y33 + G(8)))
+sh.seg(c7.pin(2), (c7.x, Y33 + G(8)))
 sh.seg(c11.pin(2), (c11.x, Y33 + G(8)))
-sh.seg((c10.x, Y33 + G(8)), (c11.x, Y33 + G(8)))
+sh.seg((c7.x, Y33 + G(8)), (c11.x, Y33 + G(8)))
 sh.gnd((G(142), Y33 + G(8)))
 sh.rail((p33.x, Y33), net="+3V3")
 sh.gnd(u1.pin("GND"))
@@ -256,6 +249,9 @@ for i, (ref, name, val) in enumerate((("SW2", "BOOT", "BOOT"), ("SW1", "USER", "
     sh.label((XP, y), name, kind="global")
     sh.seg(sw.pin(2), (XP + G(16), y))
     sh.power("power:GND", (XP + G(16), y), rot=90)
+    if ref == "SW2":                                  # IO0 held high by 10k, as proven
+        r15 = hang("Device:R", "R15", XP + G(2), y - 7.62, "10k", RAX)
+        sh.rail(r15.pin(1), net="+3V3")
 # status LED, active high
 YLED = G(106)
 r6 = horiz("Device:R", "R6", XP + G(2), YLED, "221", RAX)
