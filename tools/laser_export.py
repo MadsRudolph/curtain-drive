@@ -9,7 +9,9 @@ Writes into <board dir>/production/laser/:
                       Nested contours fill even-odd, so in XCS: import, Make compound,
                       check that removed copper is black and kept copper white, then run
                       the "Traces" preset (fill engrave, 100 %, 600 mm/s, 10 passes,
-                      240 lines/cm, one-way, 30 kHz, cross hatch).
+                      240 lines/cm, one-way, 30 kHz, cross hatch). Every hole is etched
+                      out of its pad at drill size, as a mark to drill on
+                      (--no-drill-marks leaves the pads solid).
   <name>-cut.dxf      board outline and every drilled/slotted hole as closed polylines
                       on layer CUT, for the "Cut/Drill" preset (vector, 100 mm/s, 160 passes).
   <name>-mask.dxf     solder-mask openings (pads) on layer MASK_OPEN, for the
@@ -35,6 +37,7 @@ pcbnew.SwigPyIterator.next = pcbnew.SwigPyIterator.__next__   # pcbnew on Python
 
 MAX_ERR = pcbnew.FromMM(0.002)     # arc-to-segment error, far below the laser's line pitch
 INSIDE = pcbnew.ERROR_INSIDE
+DRILL_MARKS = "--no-drill-marks" not in sys.argv
 
 
 def copper(board):
@@ -138,10 +141,13 @@ def main(pcb):
     x0, y0 = pcbnew.ToMM(bb.GetX()), pcbnew.ToMM(bb.GetY())
     w, h = pcbnew.ToMM(bb.GetWidth()), pcbnew.ToMM(bb.GetHeight())
 
-    ablate = outline.CloneDropTriangulation()
-    ablate.BooleanSubtract(copper(board))
-    ablate.Simplify()
     hl = holes(board)
+    cu = copper(board)
+    if DRILL_MARKS:
+        cu.BooleanSubtract(hl)             # etch every hole inside its pad: a centre mark to drill on
+    ablate = outline.CloneDropTriangulation()
+    ablate.BooleanSubtract(cu)
+    ablate.Simplify()
     cut = [contours(outline)[0]] + contours(hl)
 
     out = pcb.parent / "production" / "laser"
@@ -164,5 +170,5 @@ def main(pcb):
 
 
 if __name__ == "__main__":
-    for p in sys.argv[1:] or sys.exit(__doc__):
+    for p in [a for a in sys.argv[1:] if not a.startswith("--")] or sys.exit(__doc__):
         main(p)
