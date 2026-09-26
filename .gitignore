@@ -13,6 +13,10 @@ hardware-revB/docs/*.dsn
 hardware-revB/docs/*.ses
 hardware-revB/docs/*.net
 hardware-revB/docs/*.erc
+hardware-revC/docs/*.dsn
+hardware-revC/docs/*.ses
+hardware-revC/docs/*.net
+hardware-revC/docs/*.erc
 # ESPHome
 firmware/secrets.yaml
 firmware/.esphome/

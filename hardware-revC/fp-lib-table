@@ -1,0 +1,4 @@
+(fp_lib_table
+  (version 7)
+  (lib (name "CurtainDrive")(type "KiCad")(uri "${KIPRJMOD}/lib/CurtainDrive.pretty")(options "")(descr "Project footprints: via-free variants for single-sided laser fab"))
+)
