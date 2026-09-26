@@ -1,13 +1,16 @@
 # Curtain Drive -- ESPHome firmware for the curtain-drive board
 # (ESP32-C3-WROOM-02 + DRV8876, sensorless end stops via motor current).
 #
-# Pin map (see hardware/curtain-drive.kicad_sch):
-#   GPIO4  M_IN1     DRV8876 IN1 (PWM)          GPIO5  M_IN2   DRV8876 IN2 (PWM)
-#   GPIO6  M_nSLEEP  driver enable (high = on)  GPIO7  M_nFAULT driver fault, open drain, active low
-#   GPIO3  I_SENSE   IPROPI x 1 k -> 1.0 V per A of motor current
-#   GPIO1  VM_SENSE  12 V rail / 6.73 (47k : 8.2k)
-#   GPIO8  status LED (active low)              GPIO9  BOOT button
-#   GPIO20 USER button (active low)             GPIO10 SDA, GPIO2 SCL (optional AS5600 encoder)
+# Pin map (see hardware/curtain-drive.kicad_sch; chosen so the single-sided board
+# routes without crossings):
+#   GPIO8  M_IN1     DRV8876 IN1 (PWM), R19 pull-up keeps the strap high at boot
+#   GPIO7  M_IN2     DRV8876 IN2 (PWM)
+#   GPIO6  M_nSLEEP  driver enable (high = on)  GPIO5  M_nFAULT driver fault, open drain, active low
+#   GPIO4  I_SENSE   IPROPI x 1 k -> 1.0 V per A of motor current
+#   GPIO3  VM_SENSE  12 V rail / vm_divider (Rev B 46.4k : 8.25k; Rev A 47k : 8.2k)
+#   GPIO0  status LED (active high)             GPIO9  BOOT button
+#   GPIO10 USER button (active low)             GPIO20 SDA, GPIO21 SCL (optional AS5600 encoder)
+#   GPIO2  strapping pin, held high by R15, unused
 #
 # End stop principle: the DRV8876 mirrors the motor current onto IPROPI. Along the
 # track the curtain draws well under an amp; when the carriage hits the end clamp the
@@ -26,6 +29,7 @@ substitutions:
   duty_slow: "0.30"           # approach speed for the last 10 % of travel
   travel_time_ms: "20000"     # full open<->close time, re-measured by the calibrate button
   inrush_mask_ms: "300"
+  vm_divider: "6.624"         # Rev B: (46.4k + 8.25k) / 8.25k.  Rev A board: "6.732"
 
 esphome:
   name: ${name}
@@ -57,8 +61,7 @@ captive_portal:
 
 status_led:
   pin:
-    number: GPIO8
-    inverted: true
+    number: GPIO0
 
 globals:
   - id: g_pos            # 0.0 = closed, 1.0 = open
@@ -93,11 +96,11 @@ globals:
 output:
   - platform: ledc
     id: m_in1
-    pin: GPIO4
+    pin: GPIO8
     frequency: 20000 Hz
   - platform: ledc
     id: m_in2
-    pin: GPIO5
+    pin: GPIO7
     frequency: 20000 Hz
 
 switch:
@@ -112,7 +115,7 @@ binary_sensor:
   - platform: gpio
     name: "Driver fault"
     pin:
-      number: GPIO7
+      number: GPIO5
       inverted: true
     device_class: problem
     on_press:
@@ -121,7 +124,7 @@ binary_sensor:
     id: user_button
     name: "User button"
     pin:
-      number: GPIO20
+      number: GPIO10
       mode:
         input: true
         pullup: true
@@ -143,7 +146,7 @@ sensor:
   - platform: adc
     id: i_sense
     name: "Motor current"
-    pin: GPIO3
+    pin: GPIO4
     attenuation: 12db
     update_interval: 250ms
     unit_of_measurement: "A"
@@ -153,13 +156,13 @@ sensor:
   - platform: adc
     id: vm_sense
     name: "Supply voltage"
-    pin: GPIO1
+    pin: GPIO3
     attenuation: 12db
     update_interval: 10s
     unit_of_measurement: "V"
     accuracy_decimals: 1
     filters:
-      - multiply: 6.732          # (47k + 8.2k) / 8.2k
+      - multiply: ${vm_divider}
   - platform: template
     name: "Travel time"
     unit_of_measurement: "s"
@@ -311,8 +314,8 @@ interval:
 # Optional AS5600 magnetic encoder on the pulley shaft (J4). Uncomment to use it and
 # replace the dead-reckoning with a real count.
 # i2c:
-#   sda: GPIO10
-#   scl: GPIO2
+#   sda: GPIO20
+#   scl: GPIO21
 #   frequency: 400kHz
 # as5600:
 #   id: encoder

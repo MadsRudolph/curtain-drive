@@ -9,6 +9,10 @@ hardware/docs/*.ses
 hardware/docs/*.net
 hardware/docs/*.erc
 hardware/docs/*.drc
+hardware-revB/docs/*.dsn
+hardware-revB/docs/*.ses
+hardware-revB/docs/*.net
+hardware-revB/docs/*.erc
 # ESPHome
 firmware/secrets.yaml
 firmware/.esphome/

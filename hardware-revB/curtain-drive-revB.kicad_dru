@@ -1,0 +1,10 @@
+(version 1)
+
+# J1 (barrel jack, left edge) and J2 (USB-C, right edge) deliberately overhang the
+# board edge so the plug mates fully through the enclosure wall; their body outlines
+# on silk cross the edge.
+(rule "connector overhang silk"
+    (layer "F.Silkscreen")
+    (condition "A.memberOfFootprint('J1') || A.memberOfFootprint('J2')")
+    (constraint silk_clearance (min -10mm))
+    (constraint edge_clearance (min -10mm)))

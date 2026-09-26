@@ -34,29 +34,38 @@ def G(n):
 
 # Footprints -------------------------------------------------------------------
 FP_R = "Resistor_SMD:R_0603_1608Metric"
+# 0805 where a one-layer track has to pass between the pads (R9, R10, R13 straddle I_SENSE;
+# R3 has VBUS under it; R1 is a 1206 because the 0.5 mm +3V3 track runs under it)
+FP_R0805 = "Resistor_SMD:R_0805_2012Metric"
 FP_C = "Capacitor_SMD:C_0603_1608Metric"
 FP_C0805 = "Capacitor_SMD:C_0805_2012Metric"
 FP_C1206 = "Capacitor_SMD:C_1206_3216Metric"
 FP_CP8 = "Capacitor_SMD:CP_Elec_8x10"
 FP_CP6 = "Capacitor_SMD:CP_Elec_6.3x7.7"
 FP_LED = "LED_SMD:LED_0603_1608Metric"
-FP_SW = "Button_Switch_SMD:SW_SPST_PTS645Sx43SMTR92"
+FP_SW = "CurtainDrive:SW_SPST_PTS645Sx43SMTR92_Jumpers"   # paired pads bridged inside the switch
 FP_SMA = "Diode_SMD:D_SMA"
 FP_SOD123 = "Diode_SMD:D_SOD-123"
 FP_SOT236 = "Package_TO_SOT_SMD:SOT-23-6"
 FP_TSOT236 = "Package_TO_SOT_SMD:TSOT-23-6"
-FP_HTSSOP = "Package_SO:HTSSOP-16-1EP_4.4x5mm_P0.65mm_EP3.4x5mm_Mask2.46x2.31mm_ThermalVias"
-FP_ESP = "RF_Module:ESP32-C3-WROOM-02"
-FP_USBC = "Connector_USB:USB_C_Receptacle_HRO_TYPE-C-31-M-12"
-FP_JACK = "Connector_BarrelJack:BarrelJack_Horizontal"
+# Single-sided F.Cu laser fab (xTool F1 Ultra): no vias, no bottom copper, SMD only.
+FP_HTSSOP = "Package_SO:HTSSOP-16-1EP_4.4x5mm_P0.65mm_EP3.4x5mm_Mask2.46x2.31mm"
+FP_ESP = "CurtainDrive:ESP32-C3-WROOM-02_NoVias"   # stock footprint minus the EP thermal vias
+FP_USBC = "CurtainDrive:USB_C_Receptacle_HRO_TYPE-C-31-M-12_1L"   # VBUS pairs joined by the plug
+FP_JACK = "Connector_BarrelJack:BarrelJack_CUI_PJ-036AH-SMT_Horizontal"
 FP_FUSE = "Fuse:Fuse_1812_4532Metric"
 FP_L = "Inductor_SMD:L_Sunlord_MWSA0503S"
-FP_XH2 = "Connector_JST:JST_XH_B2B-XH-A_1x02_P2.50mm_Vertical"
-FP_XH4 = "Connector_JST:JST_XH_B4B-XH-A_1x04_P2.50mm_Vertical"
+FP_PH2 = "Connector_JST:JST_PH_B2B-PH-SM4-TB_1x02-1MP_P2.00mm_Vertical"
+FP_PH4 = "Connector_JST:JST_PH_B4B-PH-SM4-TB_1x04-1MP_P2.00mm_Vertical"
 
 # The root-sheet uuid must match the one recorded in the .kicad_pro.
-if OUT_PRO.exists():
-    sheet_uuid = json.loads(OUT_PRO.read_text())["sheets"][0][0]
+# pcbnew saves can leave "sheets" empty, so fall back to the existing schematic's uuid.
+_sheets = json.loads(OUT_PRO.read_text()).get("sheets") if OUT_PRO.exists() else None
+if _sheets:
+    sheet_uuid = _sheets[0][0]
+elif OUT_SCH.exists():
+    import re
+    sheet_uuid = re.search(r'\(uuid "([^"]+)"\)', OUT_SCH.read_text()).group(1)
 else:
     sheet_uuid = str(_uuid.uuid4())
 
@@ -92,10 +101,11 @@ sh.gnd((G(20), j1.pin(2).y))
 sh.nc(j1.pin(3))
 
 N1 = (G(36), YP)
-d1 = sh.place("Device:D_TVS", "D1", at=(N1[0], YP + 3.81), rot=90, value="SMAJ15A", footprint=FP_SMA)
+# unidirectional TVS: cathode (pin 1) on +12 V, anode on GND
+d1 = sh.place("Diode:SMAJ15A", "D1", at=(N1[0], YP + 3.81), rot=270, value="SMAJ15A", footprint=FP_SMA)
 c1 = hang("Device:C_Polarized", "C1", G(46), YP, "220uF 25V", FP_CP8)
 c2 = hang("Device:C", "C2", G(56), YP, "100nF 50V", FP_C)
-r1 = hang("Device:R", "R1", G(66), YP, "47k", FP_R)             # VM sense top
+r1 = hang("Device:R", "R1", G(66), YP, "47k", "Resistor_SMD:R_1206_3216Metric")             # VM sense top
 r2 = hang("Device:R", "R2", G(66), YP + 7.62, "8.2k", FP_R)     # VM sense bottom
 c3 = hang("Device:C", "C3", G(74), YP + 7.62, "100nF", FP_C)    # sense filter
 RAIL_A = YP + G(14)
@@ -122,6 +132,7 @@ sh.power("power:PWR_FLAG", (G(110), YP))
 sh.note((G(76), G(48)), "2. USB-C  (5 V bench power + native USB-serial/JTAG of the ESP32-C3)", size=2)
 j2 = sh.place("Connector:USB_C_Receptacle_USB2.0_16P", "J2", at=(G(70), G(70)), value="USB-C", footprint=FP_USBC)
 YV = j2.pin("A4").y                                  # VBUS row
+j2.field_at = {"Reference": (j2.x - 5.08, YV - 5.08), "Value": (j2.x + 2.54, YV - 5.08)}
 XE = G(110)                                          # ESD array centre x
 u4 = sh.place("Power_Protection:USBLC6-2SC6", "U4", at=(XE, j2.pin("B7").y), value="USBLC6-2SC6", footprint=FP_SOT236)
 d5 = sh.place("Device:D_Schottky", "D5", at=(G(116), YV), rot=180, value="B5819W", footprint=FP_SOD123)
@@ -129,10 +140,17 @@ sh.seg(j2.pin("A4"), d5.pin(2))                       # VBUS -> (ESD tap) -> D5 
 sh.seg(d5.pin(1), (G(120), YV))
 sh.seg((G(120), YV), (G(120), YP))                    # up into the VBUCK line
 sh.seg(u4.pin(5), (u4.pin(5).x, YV))                  # ESD VBUS pin up to VBUS row
-sh.gnd(u4.pin(2))
+# On one layer the ESD array's GND pin is boxed in by the data lines: it leaves over a 0R.
+Y16 = u4.pin(2).y + 2.54
+sh.seg(u4.pin(2), (u4.pin(2).x, Y16))
+r16 = horiz("Device:R", "R16", u4.pin(2).x + 2.54, Y16, "0R", "Resistor_SMD:R_0805_2012Metric")
+r16.field_at = {"Reference": (r16.x - 2.2, Y16 - 1.3), "Value": (r16.x + 2.2, Y16 - 1.3)}
+sh.seg((u4.pin(2).x, Y16), r16.pin(1))
+sh.power("power:GND", (r16.pin(2).x, Y16), rot=90)
 # CC pull-downs (5.1k -> UFP / sink)
-r3 = horiz("Device:R", "R3", G(88), j2.pin("A5").y, "5.1k", FP_R)
+r3 = horiz("Device:R", "R3", G(88), j2.pin("A5").y, "5.1k", FP_R0805)   # VBUS runs under it
 r4 = horiz("Device:R", "R4", G(96), j2.pin("B5").y, "5.1k", FP_R)
+r4.field_at = {"Reference": (r4.x - 2.2, r4.y + 2.8), "Value": (r4.x + 2.2, r4.y + 2.8)}
 sh.seg(j2.pin("A5"), r3.pin(1))
 sh.seg(r3.pin(2), (G(98), r3.y))
 sh.power("power:GND", (G(98), r3.y), rot=90)
@@ -143,9 +161,14 @@ sh.power("power:GND", (G(106), r4.y), rot=90)
 sh.seg(j2.pin("B7"), u4.pin(1))
 sh.seg(j2.pin("A7"), (G(84), j2.pin("A7").y))
 sh.seg((G(84), j2.pin("A7").y), (G(84), j2.pin("B7").y))
-sh.seg(j2.pin("A6"), u4.pin(3))
-sh.seg(j2.pin("B6"), (G(86), j2.pin("B6").y))
-sh.seg((G(86), j2.pin("B6").y), (G(86), j2.pin("A6").y))
+# The receptacle pad row runs D+(B6) D-(A7) D+(A6) D-(B7): on one copper layer A6 is
+# boxed in by the two D- pads, so it joins D+ over a 0R jumper that straddles the D- track.
+r14 = horiz("Device:R", "R14", G(88), j2.pin("A6").y, "0R", "Resistor_SMD:R_0603_1608Metric")
+r14.field_at = {"Reference": (r14.x - 2.2, r14.y - 1.3), "Value": (r14.x + 2.2, r14.y - 1.3)}
+sh.seg(j2.pin("A6"), r14.pin(1))
+sh.seg(r14.pin(2), u4.pin(3))
+sh.seg(j2.pin("B6"), (G(100), j2.pin("B6").y))
+sh.seg((G(100), j2.pin("B6").y), (G(100), j2.pin("A6").y))
 sh.seg(u4.pin(6), (G(128), u4.pin(6).y))
 sh.label((G(128), u4.pin(6).y), "USB_D-", kind="global")
 sh.seg(u4.pin(4), (G(128), u4.pin(4).y))
@@ -198,7 +221,7 @@ sh.power("power:PWR_FLAG", (x, YF)); sh.power("power:GND", (x, YF + 2.54)); sh.s
 # =============================================================================
 # Band 2: ESP32-C3                                                       y ~ 147
 # =============================================================================
-sh.note((G(86), G(80)), "4. ESP32-C3-WROOM-02  (native USB, strapping: IO2 high via SCL pull-up, IO8 high via LED, IO9 = BOOT)", size=2)
+sh.note((G(86), G(83)), "4. ESP32-C3-WROOM-02  (native USB, strapping: IO2 high via R15, IO8 high via R19, IO9 = BOOT)", size=2)
 u1 = sh.place("RF_Module:ESP32-C3-WROOM-02", "U1", at=(G(140), G(116)), value="ESP32-C3-WROOM-02", footprint=FP_ESP)
 # EN: 10k pull-up + 1uF delay + reset button
 XEN = G(94)
@@ -209,30 +232,52 @@ c9 = hang("Device:C", "C9", XEN, u1.pin("EN").y, "1uF", FP_C)
 sh.gnd(c9.pin(2))
 sw3 = sh.place("Switch:SW_Push", "SW3", at=(G(86), u1.pin("EN").y), value="RESET", footprint=FP_SW)
 sh.gnd(sw3.pin(1))
-# ADC / I2C / control nets leave as global labels
+# ADC / I2C / control nets leave as global labels. The GPIO choice follows the
+# single-sided layout: I_SENSE (IO4) and the four DRV8876 lines (IO5..IO8) leave the
+# module's left edge in the reverse of the driver's pin order, so they fan straight in
+# without crossing; I2C + USER sit below the USB pair on the right.
 XL = G(120)
-for pin, name in (("IO0", "SDA"), ("IO1", "VM_SENSE"), ("IO2", "SCL"), ("IO3", "I_SENSE"),
-                  ("IO4", "M_IN1"), ("IO5", "M_IN2"), ("IO6", "M_nSLEEP"), ("IO7", "M_nFAULT")):
+for pin, name in (("IO0", "LED"), ("IO3", "VM_SENSE"), ("IO4", "I_SENSE"),
+                  ("IO5", "M_nFAULT"), ("IO6", "M_nSLEEP"), ("IO7", "M_IN2"), ("IO8", "M_IN1")):
     p = u1.pin(pin)
     sh.seg(p, (XL, p.y))
     sh.label((XL, p.y), name, kind="global")
-# status LED, active low on IO8 (doubles as the IO8 boot pull-up)
-p8 = u1.pin("IO8")
-r6 = horiz("Device:R", "R6", G(110), p8.y, "1k", FP_R)
-sh.seg(p8, r6.pin(2))
-sh.seg(r6.pin(1), (G(100), p8.y))
-d3 = sh.place("Device:LED", "D3", at=(G(100), p8.y - 3.81), rot=90, value="STATUS", footprint=FP_LED)
-sh.rail(d3.pin(2), net="+3V3")
-# BOOT button on IO9 (internal pull-up), USER button on IO20
+sh.nc(u1.pin("IO1"))
+# status LED, active high on IO0
+XLED, YLED = G(70), G(108)
+r6 = horiz("Device:R", "R6", XLED, YLED, "1k", FP_R)
+sh.seg((XLED - G(8), YLED), r6.pin(1))
+sh.label((XLED - G(8), YLED), "LED", kind="global")
+d3 = sh.place("Device:LED", "D3", at=(r6.pin(2).x, YLED + 3.81), rot=90, value="STATUS", footprint=FP_LED)
+sh.gnd(d3.pin(1))
+# IN1 on IO8: the strapping pin must read high for the serial bootloader and the
+# DRV8876 input pulls down, so R19 holds it up (nSLEEP keeps the bridge off at boot).
+Y19 = YLED + G(18)
+r19 = horiz("Device:R", "R19", XLED, Y19, "10k", FP_R)
+sh.seg((XLED - G(8), Y19), r19.pin(1))
+sh.label((XLED - G(8), Y19), "M_IN1", kind="global")
+sh.rail(r19.pin(2), net="+3V3")
+# BOOT button on IO9 (internal pull-up), USER button on IO10
 p9 = u1.pin("IO9")
 sh.seg(p9, (G(90), p9.y))
 sw2 = sh.place("Switch:SW_Push", "SW2", at=(G(86), p9.y), value="BOOT", footprint=FP_SW)
 sh.gnd(sw2.pin(1))
-p20 = u1.pin("IO20/RXD")
-sw1 = sh.place("Switch:SW_Push", "SW1", at=(G(160), p20.y), value="USER", footprint=FP_SW)
-sh.seg(p20, sw1.pin(1))
-sh.gnd(sw1.pin(2))
-sh.nc(u1.pin("IO10"), u1.pin("IO21/TXD"))
+p10 = u1.pin("IO10")
+sw1 = sh.place("Switch:SW_Push", "SW1", at=(G(108), G(136)), value="USER", footprint=FP_SW)
+sh.seg(p10, (G(112), p10.y))
+sh.seg((G(112), p10.y), sw1.pin(2))
+sh.gnd(sw1.pin(1))
+# IO2 is a strapping pin; Espressif recommend holding it high against glitches
+p2 = u1.pin("IO2")
+r15 = horiz("Device:R", "R15", G(104), p2.y, "10k", FP_R)
+r15.field_at = {"Reference": (r15.x - 2.2, r15.y + 2.8), "Value": (r15.x + 2.2, r15.y + 2.8)}
+sh.seg(r15.pin(2), p2)
+sh.rail(r15.pin(1), net="+3V3", rise=5.08)
+# I2C on IO20/IO21 (right-hand pins)
+for pin, name in (("IO20/RXD", "SDA"), ("IO21/TXD", "SCL")):
+    p = u1.pin(pin)
+    sh.seg(p, (G(160), p.y))
+    sh.label((G(160), p.y), name, kind="global")
 # USB data
 XU = G(122)
 for pin, name in (("IO18", "USB_D-"), ("IO19", "USB_D+")):
@@ -253,7 +298,7 @@ sh.gnd((G(148), Y33 + G(8)))
 sh.rail((p33.x, Y33), net="+3V3")
 sh.gnd(u1.pin("GND"))
 # I2C encoder header (AS5600 breakout) with the bus pull-ups
-j4 = sh.place("Connector_Generic:Conn_01x04", "J4", at=(G(196), G(124)), value="ENCODER I2C", footprint=FP_XH4)
+j4 = sh.place("Connector_Generic:Conn_01x04", "J4", at=(G(196), G(124)), value="ENCODER I2C", footprint=FP_PH4)
 sh.seg(j4.pin(1), (G(190), j4.pin(1).y))
 sh.seg((G(190), j4.pin(1).y), (G(190), j4.pin(1).y - G(6)))
 sh.rail((G(190), j4.pin(1).y - G(6)), net="+3V3")
@@ -262,7 +307,7 @@ r7 = hang("Device:R", "R7", G(182), j4.pin(2).y - 7.62, "4.7k", FP_R)
 sh.rail(r7.pin(1), net="+3V3")
 sh.label((G(182), j4.pin(2).y), "SDA", kind="global")
 sh.seg(j4.pin(3), (G(172), j4.pin(3).y))
-r8 = hang("Device:R", "R8", G(172), j4.pin(3).y - 7.62, "10k", FP_R)
+r8 = hang("Device:R", "R8", G(172), j4.pin(3).y - 7.62, "4.7k", FP_R)     # matches SDA
 sh.rail(r8.pin(1), net="+3V3")
 sh.label((G(172), j4.pin(3).y), "SCL", kind="global")
 sh.seg(j4.pin(4), (G(190), j4.pin(4).y))
@@ -288,14 +333,14 @@ for pin, name in (("EN/IN1", "M_IN1"), ("PH/IN2", "M_IN2"), ("nSLEEP", "M_nSLEEP
 XV = G(108)
 sh.seg(u2.pin("PMODE"), (XV, u2.pin("PMODE").y))
 sh.rail((XV, u2.pin("PMODE").y), net="+3V3")
-r9 = hang("Device:R", "R9", XV, u2.pin("PMODE").y, "10k", FP_R)
-r10 = hang("Device:R", "R10", XV, u2.pin("PMODE").y + 7.62, "47k", FP_R)
+r9 = hang("Device:R", "R9", XV, u2.pin("PMODE").y, "10k", FP_R0805)
+r10 = hang("Device:R", "R10", XV, u2.pin("PMODE").y + 7.62, "47k", FP_R0805)
 sh.gnd(r10.pin(2))
 sh.seg(u2.pin("VREF"), r10.pin(1))
 sh.seg(u2.pin("IMODE"), (G(120), u2.pin("IMODE").y))
 sh.gnd((G(120), u2.pin("IMODE").y), drop=1.27)
 # outputs
-j3 = sh.place("Connector_Generic:Conn_01x02", "J3", at=(G(160), u2.pin("OUT1").y), value="MOTOR", footprint=FP_XH2)
+j3 = sh.place("Connector_Generic:Conn_01x02", "J3", at=(G(160), u2.pin("OUT1").y), value="MOTOR", footprint=FP_PH2)
 sh.seg(u2.pin("OUT1"), j3.pin(1))
 sh.seg(u2.pin("OUT2"), j3.pin(2))
 # IPROPI -> 1k to GND (1 V/A), RC filter into the ADC
@@ -314,7 +359,7 @@ sh.gnd((G(164), RAIL_I), drop=1.27)
 # nFAULT open-drain with pull-up
 pf = u2.pin("nFAULT")
 sh.seg(pf, (G(196), pf.y))
-r13 = hang("Device:R", "R13", G(192), pf.y - 7.62, "10k", FP_R)
+r13 = hang("Device:R", "R13", G(192), pf.y - 7.62, "10k", FP_R0805)
 sh.rail(r13.pin(1), net="+3V3")
 sh.label((G(196), pf.y), "M_nFAULT", kind="global")
 # VM supply, charge pump reservoir, decoupling
