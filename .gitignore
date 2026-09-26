@@ -25,3 +25,4 @@ __pycache__/
 *.pyc
 # Session notes
 HANDOFF.md
+hardware-revC/logs/
