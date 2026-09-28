@@ -26,3 +26,6 @@ __pycache__/
 # Session notes
 HANDOFF.md
 hardware-revC/logs/
+
+# KiCad local history snapshots
+.history/
