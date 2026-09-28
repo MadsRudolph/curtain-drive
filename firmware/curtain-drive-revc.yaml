@@ -19,20 +19,29 @@
 # End stop principle: all of bridge A's current returns through the 1 ohm sense resistor. Along the
 # track the curtain draws well under an amp; when the carriage hits the end clamp the
 # motor stalls and the current jumps past `stall_current` within a few tens of ms.
-# The control loop samples the ADC every 20 ms, ignores the first 300 ms (inrush,
-# the PWM is ramped anyway) and stops after 3 consecutive samples over the threshold.
+# The control loop samples the ADC every 20 ms, ramps the PWM in over the soft-start time,
+# ignores stalls during the startup blanking (which must end after the start spike that
+# follows the ramp) and stops after 3 consecutive samples over the threshold.
 # That event is the end stop: it re-homes the position estimate to 0 % or 100 %.
 # Between the ends the position is dead-reckoned from run time and re-synced at
 # every end, exactly like a time-based cover with switches -- minus the switches.
+#
+# Tuning: http://curtain-drive.local (or the board's IP) is a dashboard with live graphs,
+# the peak and stop current of every run, and sliders for the values below. Slider
+# changes apply at once and survive a reboot; the substitutions are only the defaults.
 
 substitutions:
   name: curtain-drive
   friendly_name: Curtain Drive
-  stall_current: "1.8"        # A   -- set halfway between running and stalled current (log "Motor current")
-  duty_max: "0.50"            # 12 V bus, 6 V rated motor -> 50 % duty (the L298 drops ~2 V: raise if slow)
-  duty_slow: "0.30"           # approach speed for the last 10 % of travel
+  stall_current: "1.0"        # A   -- set halfway between running and stalled current; converted DM-S2000MD: ~0.55 A running, ~1.5 A stalled
+  duty_max: "50"              # %   -- 12 V bus, 6 V rated motor -> 50 % duty (the L298 drops ~2 V: raise if slow)
+  duty_slow: "30"             # %   -- approach speed for the last 10 % of travel
   travel_time_ms: "20000"     # full open<->close time, re-measured by the calibrate button
-  inrush_mask_ms: "300"
+  ramp_ms: "300"              # soft start: duty ramps from 0 to full over this time
+  inrush_mask_ms: "800"       # startup blanking: no stall check until this long after start.
+                              # The DM-S2000MD's start spike peaks ~0.75 A at 300-350 ms (right
+                              # when the ramp hits full duty) and is gone by ~450 ms.
+  stall_samples: "3"          # consecutive 20 ms samples over stall_current before stopping
   vm_divider: "6.624"         # (46.4k + 8.25k) / 8.25k
 
 esphome:
@@ -59,6 +68,22 @@ wifi:
   ap:
     ssid: "Curtain Drive"
 captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+  js_url: ""                  # replace the stock UI ...
+  js_include: dashboard.js    # ... with the tuning dashboard (big graphs, compact log)
+  sorting_groups:
+    - id: grp_live
+      name: "Live"
+      sorting_weight: 10
+    - id: grp_tune
+      name: "Tuning"
+      sorting_weight: 20
+    - id: grp_diag
+      name: "Diagnostics"
+      sorting_weight: 30
 
 status_led:
   pin:
@@ -93,6 +118,12 @@ globals:
   - id: g_calibrating
     type: bool
     initial_value: "false"
+  - id: g_peak           # highest current of the current run, after the inrush mask
+    type: float
+    initial_value: "0.0"
+  - id: g_duty           # PWM duty applied right now, 0..1 (for the dashboard)
+    type: float
+    initial_value: "0.0"
 
 output:
   - platform: ledc
@@ -114,12 +145,14 @@ binary_sensor:
         input: true
         pullup: true
       inverted: true
+    web_server:
+      sorting_group_id: grp_diag
     on_click:
       - min_length: 50ms
         max_length: 800ms
         then:
           - lambda: |-
-              if (id(g_dir) != 0) { id(motor_stop).execute(); }
+              if (id(g_dir) != 0) { id(last_stop).publish_state("stopped by hand (USER button)"); id(motor_stop).execute(); }
               else if (id(g_pos) < 0.5) { id(curtain).make_call().set_command_open().perform(); }
               else { id(curtain).make_call().set_command_close().perform(); }
       - min_length: 2s
@@ -133,11 +166,45 @@ sensor:
     name: "Motor current"
     pin: GPIO39
     attenuation: 12db
-    update_interval: 250ms
+    update_interval: 100ms       # 10 points/s on the dashboard graph
     unit_of_measurement: "A"
     accuracy_decimals: 2
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 1
     filters:
       - multiply: 1.0            # 1 ohm sense resistor -> 1 V per A
+  - platform: template
+    id: peak_current
+    name: "Peak current (last run)"
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    update_interval: never
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 2
+  - platform: template
+    id: stop_current
+    name: "Current at last stall stop"
+    unit_of_measurement: "A"
+    accuracy_decimals: 2
+    update_interval: never
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 3
+  - platform: template
+    id: duty_now
+    name: "Motor duty"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    update_interval: 250ms
+    lambda: |-
+      return 100.0f * id(g_duty);
+    filters:
+      - delta: 1.0
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 4
   - platform: adc
     id: vm_sense
     name: "Supply voltage"
@@ -146,6 +213,8 @@ sensor:
     update_interval: 10s
     unit_of_measurement: "V"
     accuracy_decimals: 1
+    web_server:
+      sorting_group_id: grp_diag
     filters:
       - multiply: ${vm_divider}
   - platform: template
@@ -154,17 +223,127 @@ sensor:
     accuracy_decimals: 1
     entity_category: diagnostic
     lambda: return id(g_travel_ms) / 1000.0;
-    update_interval: 60s
+    update_interval: 5s
+    filters:
+      - delta: 0.05
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 10
+
+text_sensor:
+  - platform: template
+    id: last_stop
+    name: "Last stop reason"
+    update_interval: never
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 5
+
+number:
+  - platform: template
+    id: n_stall_current
+    name: "Stall threshold"
+    unit_of_measurement: "A"
+    min_value: 0.3
+    max_value: 3.0
+    step: 0.05
+    initial_value: ${stall_current}
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 1
+  - platform: template
+    id: n_stall_samples
+    name: "Stall samples (x20 ms)"
+    min_value: 1
+    max_value: 25
+    step: 1
+    initial_value: ${stall_samples}
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 2
+  - platform: template
+    id: n_duty_max
+    name: "Speed (duty)"
+    unit_of_measurement: "%"
+    min_value: 10
+    max_value: 100
+    step: 5
+    initial_value: ${duty_max}
+    restore_value: true
+    optimistic: true
+    mode: slider
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 3
+  - platform: template
+    id: n_duty_slow
+    name: "Approach speed (last 10 %)"
+    unit_of_measurement: "%"
+    min_value: 10
+    max_value: 100
+    step: 5
+    initial_value: ${duty_slow}
+    restore_value: true
+    optimistic: true
+    mode: slider
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 4
+  - platform: template
+    id: n_ramp_ms
+    name: "Soft start"
+    unit_of_measurement: "ms"
+    min_value: 0
+    max_value: 2000
+    step: 50
+    initial_value: ${ramp_ms}
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 5
+  - platform: template
+    id: n_inrush_ms
+    name: "Startup blanking"
+    unit_of_measurement: "ms"
+    min_value: 100
+    max_value: 3000
+    step: 50
+    initial_value: ${inrush_mask_ms}
+    restore_value: true
+    optimistic: true
+    mode: box
+    entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 6
 
 button:
   - platform: template
     name: "Calibrate travel"
     entity_category: config
+    web_server:
+      sorting_group_id: grp_tune
+      sorting_weight: 11
     on_press:
       - script.execute: calibrate
   - platform: restart
     name: "Restart"
     entity_category: diagnostic
+    web_server:
+      sorting_group_id: grp_diag
 
 cover:
   - platform: template
@@ -174,6 +353,9 @@ cover:
     has_position: true
     optimistic: false
     lambda: return id(g_pos);
+    web_server:
+      sorting_group_id: grp_live
+      sorting_weight: 0
     open_action:
       - lambda: id(g_target) = 1.0; id(g_homing) = true;
       - script.execute: motor_go
@@ -186,6 +368,7 @@ cover:
           id(g_homing) = (pos <= 0.0f || pos >= 1.0f);
       - script.execute: motor_go
     stop_action:
+      - lambda: if (id(g_dir) != 0) id(last_stop).publish_state("stopped from the dashboard / HA");
       - script.execute: motor_stop
 
 script:
@@ -200,6 +383,7 @@ script:
           id(g_start_ms) = millis();
           id(g_last_ms) = id(g_start_ms);
           id(g_stall_n) = 0;
+          id(g_peak) = 0.0f;
           id(curtain).current_operation = id(g_dir) > 0 ? COVER_OPERATION_OPENING : COVER_OPERATION_CLOSING;
           id(curtain).publish_state();
           ESP_LOGI("curtain", "move %s from %.2f to %.2f", id(g_dir) > 0 ? "OPEN" : "CLOSE", id(g_pos), id(g_target));
@@ -209,7 +393,9 @@ script:
       - lambda: |-
           id(m_in1).set_level(0.0f);
           id(m_in2).set_level(0.0f);
+          if (id(g_dir) != 0) id(peak_current).publish_state(id(g_peak));
           id(g_dir) = 0;
+          id(g_duty) = 0.0f;
           id(g_homing) = false;
           id(curtain).current_operation = COVER_OPERATION_IDLE;
           id(curtain).publish_state();
@@ -256,25 +442,34 @@ interval:
           id(g_pos) = clamp(id(g_pos) + id(g_dir) * step, 0.0f, 1.0f);
 
           // ---- speed: ramp in, slow down near a known end ----
-          float duty = ${duty_max};
-          if (since_start < ${inrush_mask_ms}) duty *= (float)since_start / ${inrush_mask_ms};
+          const uint32_t ramp_ms = (uint32_t) id(n_ramp_ms).state;
+          // Blanking always runs at least 200 ms past the end of the ramp: the start spike
+          // comes when the motor first gets full duty, not while it ramps.
+          const uint32_t blank_ms = std::max((uint32_t) id(n_inrush_ms).state, ramp_ms + 200);
+          float duty = id(n_duty_max).state / 100.0f;
+          if (since_start < ramp_ms) duty *= (float)since_start / ramp_ms;
           float remaining = id(g_dir) > 0 ? (1.0f - id(g_pos)) : id(g_pos);
-          if (remaining < 0.10f) duty = std::min(duty, (float)${duty_slow});
+          if (remaining < 0.10f) duty = std::min(duty, id(n_duty_slow).state / 100.0f);
+          id(g_duty) = duty;
           if (id(g_dir) > 0) { id(m_in1).set_level(duty); id(m_in2).set_level(0.0f); }
           else               { id(m_in1).set_level(0.0f); id(m_in2).set_level(duty); }
 
           // ---- stall detection = end stop / obstruction ----
           float amps = id(i_sense).sample();      // 1 V per A
-          if (since_start > ${inrush_mask_ms}) {
-            id(g_stall_n) = (amps > ${stall_current}) ? id(g_stall_n) + 1 : 0;
-            if (id(g_stall_n) >= 3) {
+          if (since_start > blank_ms) {
+            if (amps > id(g_peak)) id(g_peak) = amps;
+            id(g_stall_n) = (amps > id(n_stall_current).state) ? id(g_stall_n) + 1 : 0;
+            if (id(g_stall_n) >= (int) id(n_stall_samples).state) {
+              id(stop_current).publish_state(amps);
               bool at_end = remaining < 0.15f || id(g_homing);
               if (at_end) {
                 id(g_pos) = id(g_dir) > 0 ? 1.0f : 0.0f;
                 if (id(g_calibrating)) id(g_travel_ms) = since_start;
                 ESP_LOGI("curtain", "end stop (%.2f A) -> position %.0f", amps, id(g_pos));
+                id(last_stop).publish_state(str_sprintf("end stop %s at %.2f A", id(g_dir) > 0 ? "open" : "closed", amps));
               } else {
                 ESP_LOGW("curtain", "obstruction at %.2f (%.2f A), stopping", id(g_pos), amps);
+                id(last_stop).publish_state(str_sprintf("obstruction at %.0f %% (%.2f A)", id(g_pos) * 100.0f, amps));
               }
               id(motor_stop).execute();
               return;
@@ -284,12 +479,14 @@ interval:
           // ---- target reached (not when homing: run into the end on purpose) ----
           if (!id(g_homing) && ((id(g_dir) > 0 && id(g_pos) >= id(g_target)) ||
                                 (id(g_dir) < 0 && id(g_pos) <= id(g_target)))) {
+            id(last_stop).publish_state(str_sprintf("reached %.0f %%", id(g_pos) * 100.0f));
             id(motor_stop).execute();
             return;
           }
           // safety: never run longer than 1.5x the travel time
           if (since_start > id(g_travel_ms) * 3 / 2) {
             ESP_LOGW("curtain", "timeout without stall, stopping");
+            id(last_stop).publish_state("timeout: no stall within 1.5x travel time");
             id(motor_stop).execute();
           }
   - interval: 200ms
