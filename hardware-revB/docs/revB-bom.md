@@ -59,7 +59,7 @@ copper. Holes are not plated, so each lead is soldered on the copper side only.
 
 ## Values that changed from rev A, and why
 
-- **The VM sense divider is 46.4k / 8.25k** (rev A: 47k / 8.2k), because the shop stocks E96 values only. The ratio is 6.624 instead of 6.732. The firmware substitution `vm_divider` in `firmware/curtain-drive.yaml` is already set to 6.624 for rev B, with rev A's value in the comment.
+- **The VM sense divider is 46.4k / 8.25k** (rev A: 47k / 8.2k), because the shop stocks E96 values only. The ratio is 6.624 instead of 6.732. The firmware substitution `vm_divider` in `firmware/curtain-drive.yaml` was set to 6.624 for rev B, with rev A's value in the comment. That file has since been removed; it is in git history up to commit 260a216.
 - **The VREF divider is 10k / 46.4k** (rev A: 10k / 47k). VREF, and with it ITRIP, drops by 0.2 %.
 - **The I2C pull-ups are both 4.75 kΩ.** Rev A had 4.7k on SDA but 10k on SCL, a mismatch carried over from the first schematic. Both lines now match.
 - **The buck output is 470 µF + 220 µF electrolytic**, where rev A used 2 × 22 µF ceramic. The shop has no ceramic above 100 nF. See the bench check below.

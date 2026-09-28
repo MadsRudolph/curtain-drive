@@ -1,6 +1,7 @@
 # Curtain Drive -- ESPHome firmware for the rev C board
 # (ESP32-WROOM-32 + L298, sensorless end stops via motor current).
-# Rev A/B (ESP32-C3 + DRV8876) use curtain-drive.yaml instead.
+# The rev A/B firmware (ESP32-C3 + DRV8876) was firmware/curtain-drive.yaml; it is
+# in git history up to commit 260a216.
 #
 # Pin map (see hardware-revC/curtain-drive-revC.kicad_sch; chosen so the single-sided
 # board routes without crossings):
