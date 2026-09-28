@@ -48,7 +48,7 @@ through the laser-cut holes and soldered on the copper. Holes are not plated.
 | C9 | 1 | 1 µF 50 V | `1µF 50V` | radial Ø5, 2 mm |
 | C4, C10 | 2 | 10 µF 50 V | `10µF 50V` | radial Ø5, 2 mm |
 | C16 | 1 | 68 µF 50 V | `68µF 50V` | radial Ø8, 3.5 mm |
-| D1 | 1 | 1.5KE15A (unidirectional TVS) | `1.5KE15A` | DO-201AE, 15.24 mm |
+| D1 | 1 | 1.5KE24A (unidirectional TVS), or 1.5KE15A for 12 V only | `1.5KE24A` | DO-201AE, 15.24 mm |
 | D2, D6, D7, D8, D9 | 5 | 1N5817 Schottky | `1N5817` | DO-41, 10.16 mm |
 | D10 | 1 | 1N4003 | `1N4003` | DO-41, 10.16 mm |
 | D3 | 1 | 3 mm LED, green | `LED 3MM GRØN` | 3 mm |
@@ -124,6 +124,18 @@ and fills the board. Re-run them rather than editing the files by hand.
 5. **Solder all four legs of every switch**, even if a leg looks unused. The two
    internally joined leg pairs carry signals across tracks.
 
+## Supply voltage
+
+The board is built for 12 V but runs on 12 to 17 V with the **1.5KE24A** as D1 (the
+prototype runs on 15 V). The 1.5KE15A conducts from 14.3 V, so it only suits 12 V. Above
+12 V:
+- U3 (LM317) gets hotter: about 1.6 W average and 3.3 W at the Wi-Fi peaks at 17 V.
+  Its heatsink is required, and the PLA enclosure is the limit; check the lid over U3
+  after a long run.
+- The 1N5817s (D2, D6 to D9) are 20 V parts. 1N5819 (40 V) is a drop-in upgrade.
+- Lower the dashboard's speed so the 6 V motor sees about the same average voltage:
+  duty ≈ 5 V / (V_in − 2 V). That is 50 % at 12 V, about 40 % at 15 V and 33 % at 17 V.
+
 ## Flashing
 
 The WROOM-32 has no USB. Flash it over J5 with any 3.3 V USB-serial adapter:
@@ -161,6 +173,9 @@ The board is 90 × 72 mm with four M2.5 holes at (3.5, 3.5), (86.5, 3.5), (87, 6
 and (3.5, 45), measured from the top-left corner of the copper side, as rev B. The
 tallest back-side parts are U2 standing (about 22 mm, more with a heatsink), U3 with
 its heatsink, R11 (about 10 mm) and C1 (about 20 mm). Mount the board copper side down on
-standoffs; only the module is on that side. The rev B enclosure does **not** fit
-rev C: the barrel jack and USB-C openings become a screw-terminal wire entry, and
-the parts on the back are taller.
+standoffs; only the module is on that side. The rev A/B enclosure does **not** fit
+rev C. Print the rev C one instead: `enclosure/stl/revC/curtain-drive-revC-base.stl`
+and `-lid.stl`, built by `enclosure/enclosure_revC_blender.py` (model in
+`enclosure/enclosure-revC.blend`). 6 mm standoffs (M2.5 self-tapping), 12 V wires in
+through the right wall at J1, encoder cable out of the left wall above J4, lid held by
+six M2.5 screws (four posts plus two lugs on the back wall).
