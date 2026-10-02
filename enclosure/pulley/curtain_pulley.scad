@@ -38,6 +38,7 @@ screw_d      = 3.4;    // M3 centre screw through the drum into the servo shaft
 screw_floor  = 3.0;    // material under the screw head
 access_d     = 7.0;    // bore from the bottom so a hex key reaches the M3 screw
 knot_d       = 2.2;    // cord anchor holes through the flanges
+knot_pocket  = [5, 3]; // dia, depth: the upper knot sits in this, the top flange is tight to the box floor
 
 // ---------- idler ----------
 idler_core_d   = 24;
@@ -45,9 +46,9 @@ idler_h        = 44;   // spans both runs (they leave the drum ~20 mm apart in h
 idler_bore     = 5.4;  // M5 bolt as the axle
 bracket_t      = 5;
 bracket_w      = 40;   // along the track
-arm_len        = 40;
-bolt_off       = 30;   // idler axis from the wall: spool (r 19) + screw heads clear the plate
-washer_gap     = 1.0;  // total axial play (use a washer each side)
+arm_len        = 46;
+bolt_off       = 36;   // idler axis from the wall: flange (r 19) clears the 13 mm gussets by 4 mm
+washer_gap     = 3.0;  // a 1 mm M5 washer each side + 1 mm play
 slot_len       = 20;   // tensioning slots for the wall screws
 wall_screw_d   = 4.5;
 
@@ -85,6 +86,8 @@ module drum() {
         translate([core_d / 2 + knot_d / 2 + 0.3, 0, -1]) cylinder(d = knot_d, h = base_t + 2, $fn = 24);
         rotate([0, 0, 180]) translate([core_d / 2 + knot_d / 2 + 0.3, 0, zA + chamber_h - 1])
             cylinder(d = knot_d, h = cone_h + flange_flat + 2, $fn = 24);
+        rotate([0, 0, 180]) translate([core_d / 2 + knot_d / 2 + 0.3, 0, ztop - knot_pocket[1]])
+            cylinder(d = knot_pocket[0], h = knot_pocket[1] + 1, $fn = 32);
         // direction arrows on the bottom so the two windings go on opposite ways
         translate([0, -15.5, -0.01]) linear_extrude(0.6) mirror([1, 0, 0])
             text("A cw  B ccw", size = 2.4, halign = "center", valign = "center");
