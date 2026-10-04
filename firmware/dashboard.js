@@ -60,6 +60,7 @@ const HTML = `
  <aside class=side>
   <div class=card><h2>Curtain</h2>
    <div class=big><button data-cv=open>Open</button><button data-cv=stop>Stop</button><button data-cv=close>Close</button></div>
+   <div class=bar style="margin-top:6px"><button data-mark="Mark fully closed">It is fully closed</button><button data-mark="Mark fully open">It is fully open</button></div>
    <div class=hint>Position <b id=posv>–</b></div>
    <input type=range id=pos min=0 max=100 step=1>
   </div>
@@ -67,8 +68,9 @@ const HTML = `
   <div class=card><h2>Tuning</h2><div id=tune></div>
    <div class=hint>Enter or leave a field to apply. Values are kept across restarts.</div></div>
   <div class=card><h2>Actions</h2>
-   <div class=bar><button data-btn="Calibrate travel">Calibrate travel</button>
-   <button data-btn="Restart">Restart</button></div></div>
+   <div class=bar><button id=teach>Teach travel</button><button data-btn="Calibrate travel">Calibrate travel</button>
+   <button data-btn="Restart">Restart</button></div>
+   <div class=hint>Teach travel: with the curtain closed, press once to open, press again when it is fully open.</div></div>
  </aside>
 </main>
 <details class=log><summary>Device log</summary><div id=log></div></details>`;
@@ -88,7 +90,7 @@ let t0 = Date.now(), connectedAt = 0, paused = false, pausedAt = 0, win = 60e3, 
 const LIVE = [
   ["sensor/Motor current", "Current"], ["sensor/Peak current (last run)", "Peak (last run)"],
   ["sensor/Current at last stall stop", "At last stall stop"], ["sensor/Motor duty", "Duty"],
-  ["text_sensor/Last stop reason", "Last stop"], ["sensor/Travel time", "Travel time"],
+  ["text_sensor/Last stop reason", "Last stop"], ["number/Travel time", "Travel time (s)"],
   ["sensor/Supply voltage", "Supply (check R2)"],
 ];
 $("#kv").innerHTML = LIVE.map(([id, l]) => `<span>${l}</span><span data-kv="${id}">–</span>`).join("");
@@ -126,6 +128,7 @@ function onState(d) {
       break;
   }
   if (d.domain === "number") tuneRow(d);
+  if (d.domain === "switch") switchRow(d);
   const kv = document.querySelector(`[data-kv="${CSS_esc(d.id)}"]`);
   if (kv) kv.textContent = d.state === "NA" ? "–" : (d.state ?? d.value);
 }
@@ -155,6 +158,21 @@ function tuneRow(d) {
   if (document.activeElement !== inp && !inp.classList.contains("dirty")) inp.value = d.value;
 }
 
+function switchRow(d) {
+  let row = document.querySelector(`[data-num="${CSS_esc(d.id)}"]`);
+  if (!row) {
+    row = document.createElement("div"); row.className = "num"; row.dataset.num = d.id;
+    row.dataset.w = d.sorting_weight ?? 50;
+    row.innerHTML = `<label for="sw_${d.id}">${d.name}</label><input type=checkbox id="sw_${d.id}" style="justify-self:end;width:auto">`;
+    const inp = row.querySelector("input");
+    inp.onchange = () => post(`/switch/${encodeURIComponent(d.name)}/${inp.checked ? "turn_on" : "turn_off"}`);
+    const box = $("#tune");
+    const after = [...box.children].find(c => +c.dataset.w > +row.dataset.w);
+    box.insertBefore(row, after || null);
+  }
+  row.querySelector("input").checked = d.value === true || d.state === "ON";
+}
+
 function post(url) {
   return fetch(url, { method: "POST" }).catch(e => logLine(`E request failed: ${url} ${e}`));
 }
@@ -162,6 +180,8 @@ document.querySelectorAll("[data-cv]").forEach(b => b.onclick = () => post(`/cov
 document.querySelectorAll("[data-btn]").forEach(b => b.onclick = () => {
   if (confirm(`${b.dataset.btn}?`)) post(`/button/${encodeURIComponent(b.dataset.btn)}/press`);
 });
+document.querySelectorAll("[data-mark]").forEach(b => b.onclick = () => post(`/button/${encodeURIComponent(b.dataset.mark)}/press`));
+$("#teach").onclick = () => post(`/button/${encodeURIComponent("Teach travel")}/press`);
 $("#pos").onchange = (e) => post(`/cover/Curtain/set?position=${e.target.value / 100}`);
 $("#pause").onclick = () => { paused = !paused; pausedAt = Date.now(); $("#pause").classList.toggle("on", paused);
   $("#pause").textContent = paused ? "Resume" : "Pause"; draw(); };
